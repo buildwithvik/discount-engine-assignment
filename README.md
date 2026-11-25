@@ -1,6 +1,6 @@
 # Opptra Discount Engine: FDE Intern Assignment
 
-**Live demo:** https://YOUR-PROJECT.vercel.app  ← _replace after deploying_
+**Live demo:** https://discount-engine-assignment-rho.vercel.app
 **Author:** Vikas Gowda
 
 A customer-facing cart pricing engine. It picks the best offer for each item, stacks the offers that are allowed to stack, applies a cart-level offer, and explains every price in plain language.
@@ -88,7 +88,7 @@ tests/                       engine + inputs tests (vitest)
 
 ## Deploying (Vercel)
 
-Import the repo into Vercel (it detects Vite) and add the environment variable `GEMINI_API_KEY`. Optional: `GEMINI_MODEL` (default `gemini-2.5-flash`). The `api/` folder becomes the serverless function.
+Import the repo into Vercel (it detects Vite) and add the environment variable `GEMINI_API_KEY`. Optional: `GEMINI_MODEL` to pin a model; otherwise it uses `gemini-flash-latest` and falls back to other current Flash models if Google retires one. The `api/` folder becomes the serverless function.
 
 ## Testing
 

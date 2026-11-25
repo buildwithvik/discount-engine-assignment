@@ -9,7 +9,11 @@
  * validateRule() before anything reaches the engine.
  */
 
-const MODEL = () => process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+// Google retires model IDs over time (gemini-2.5-flash already returns 404).
+// So we try a short list in order and move on only when a model is "not found".
+// GEMINI_MODEL (optional env var) is tried first.
+const MODELS = () =>
+  [process.env.GEMINI_MODEL, 'gemini-flash-latest', 'gemini-3.5-flash', 'gemini-3.6-flash'].filter(Boolean)
 const MAX_INPUT_CHARS = 300
 
 // Gemini structured-output schema (OpenAPI subset).
@@ -67,26 +71,31 @@ export async function parseRuleWithLLM({ text, knownBrands = [], knownPlatforms 
   const timer = setTimeout(() => controller.abort(), 20000)
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL()}:generateContent`
-    const resp = await fetch(url, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemPrompt(knownBrands.slice(0, 50), knownPlatforms.slice(0, 50)) }],
-        },
-        contents: [{ role: 'user', parts: [{ text: sentence }] }],
-        generationConfig: {
-          temperature: 0,
-          maxOutputTokens: 400,
-          responseMimeType: 'application/json',
-          responseSchema: RULE_SCHEMA,
-          // Flash models can skip 'thinking' for a simple extraction task (faster, cheaper).
-          ...(MODEL().includes('flash') ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-        },
-      }),
+    const body = JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: systemPrompt(knownBrands.slice(0, 50), knownPlatforms.slice(0, 50)) }],
+      },
+      contents: [{ role: 'user', parts: [{ text: sentence }] }],
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 1024,
+        responseMimeType: 'application/json',
+        responseSchema: RULE_SCHEMA,
+      },
     })
+
+    let resp = null
+    for (const model of MODELS()) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+      resp = await fetch(url, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+        body,
+      })
+      if (resp.status !== 404) break // only "model not found" moves on to the next model
+      console.error(`Gemini model ${model} not available (404), trying next`)
+    }
 
     if (!resp.ok) {
       const detail = await resp.text().catch(() => '')
@@ -95,7 +104,7 @@ export async function parseRuleWithLLM({ text, knownBrands = [], knownPlatforms 
     }
 
     const data = await resp.json()
-    const textOut = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || ''
+    const textOut = data?.candidates?.[0]?.content?.parts?.filter((p) => !p.thought).map((p) => p.text || '').join('') || ''
     let draft = null
     try {
       draft = JSON.parse(textOut)
