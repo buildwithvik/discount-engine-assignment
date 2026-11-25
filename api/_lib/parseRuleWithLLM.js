@@ -9,11 +9,12 @@
  * validateRule() before anything reaches the engine.
  */
 
-// Google retires model IDs over time (gemini-2.5-flash already returns 404).
-// So we try a short list in order and move on only when a model is "not found".
-// GEMINI_MODEL (optional env var) is tried first.
+// Google retires model IDs over time (gemini-2.5-flash already returns 404), and a
+// model can be briefly overloaded (503/429). So we try a short list in order and move
+// on when a model is not found or busy. GEMINI_MODEL (optional env var) is tried first.
 const MODELS = () =>
-  [process.env.GEMINI_MODEL, 'gemini-flash-latest', 'gemini-3.5-flash', 'gemini-3.6-flash'].filter(Boolean)
+  [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(Boolean))]
+const TRY_NEXT = new Set([404, 429, 500, 503])
 const MAX_INPUT_CHARS = 300
 
 // Gemini structured-output schema (OpenAPI subset).
@@ -93,8 +94,8 @@ export async function parseRuleWithLLM({ text, knownBrands = [], knownPlatforms 
         headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
         body,
       })
-      if (resp.status !== 404) break // only "model not found" moves on to the next model
-      console.error(`Gemini model ${model} not available (404), trying next`)
+      if (!TRY_NEXT.has(resp.status)) break // success, or an error another model won't fix (e.g. bad key)
+      console.error(`Gemini model ${model} returned ${resp.status}, trying next`)
     }
 
     if (!resp.ok) {

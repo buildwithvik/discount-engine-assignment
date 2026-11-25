@@ -88,7 +88,7 @@ tests/                       engine + inputs tests (vitest)
 
 ## Deploying (Vercel)
 
-Import the repo into Vercel (it detects Vite) and add the environment variable `GEMINI_API_KEY`. Optional: `GEMINI_MODEL` to pin a model; otherwise it uses `gemini-flash-latest` and falls back to other current Flash models if Google retires one. The `api/` folder becomes the serverless function.
+Import the repo into Vercel (it detects Vite) and add the environment variable `GEMINI_API_KEY`. Optional: `GEMINI_MODEL` to pin a model; otherwise it uses `gemini-3.8-flash` and falls back to other current Flash models if one is retired or overloaded. The `api/` folder becomes the serverless function.
 
 ## Testing
 

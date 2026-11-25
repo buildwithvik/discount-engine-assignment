@@ -123,15 +123,16 @@ describe('server: Gemini call', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'not json' }] } }] }) })))
     expect((await parseRuleWithLLM({ text: 'x' }, 'KEY')).ok).toBe(false)
   })
-  it('if a model is retired (404) it tries the next one', async () => {
+  it('if a model is retired (404) or busy (503) it tries the next one', async () => {
     let n = 0
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       n += 1
       if (n === 1) return { ok: false, status: 404, text: async () => 'gone' }
+      if (n === 2) return { ok: false, status: 503, text: async () => 'busy' }
       return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: '{"status":"unclear","missing_info":"How much?"}' }] } }] }) }
     }))
     const r = await parseRuleWithLLM({ text: 'Give a discount for big orders' }, 'KEY')
     expect(r).toMatchObject({ ok: true, draft: { status: 'unclear' } })
-    expect(n).toBe(2)
+    expect(n).toBe(3)
   })
 })
