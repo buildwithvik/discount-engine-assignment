@@ -1,18 +1,24 @@
 /**
  * CsvUploader.jsx
  *
- * Renders a file upload area for a single CSV file.
- * Calls onLoad(rawText) when a file is selected.
+ * Renders a file upload area for one file.
+ * readAs="text" → onLoad(text, fileName)   (CSV)
+ * readAs="file" → onLoad(File, fileName)   (PDF — the parser reads the bytes itself)
  */
 
 import { useRef } from 'react'
 
-export default function CsvUploader({ label, description, onLoad, hasData, fileName }) {
+export default function CsvUploader({ label, description, onLoad, hasData, fileName, accept = '.csv', readAs = 'text', icon = '📄' }) {
   const inputRef = useRef(null)
 
   function handleFile(e) {
     const file = e.target.files[0]
     if (!file) return
+    if (readAs === 'file') {
+      onLoad(file, file.name)
+      e.target.value = ''
+      return
+    }
     const reader = new FileReader()
     reader.onload = (evt) => onLoad(evt.target.result, file.name)
     reader.readAsText(file)
@@ -35,12 +41,12 @@ export default function CsvUploader({ label, description, onLoad, hasData, fileN
       <input
         ref={inputRef}
         type="file"
-        accept=".csv"
+        accept={accept}
         style={{ display: 'none' }}
         onChange={handleFile}
       />
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-        <span style={{ fontSize: 20 }}>{hasData ? '✅' : '📄'}</span>
+        <span style={{ fontSize: 20 }}>{hasData ? '✅' : icon}</span>
         <div>
           <div style={{ fontWeight: 700, fontSize: 13, color: '#131A48' }}>{label}</div>
           <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
