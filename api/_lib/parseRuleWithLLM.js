@@ -13,7 +13,14 @@
 // model can be briefly overloaded (503/429). So we try a short list in order and move
 // on when a model is not found or busy. GEMINI_MODEL (optional env var) is tried first.
 const MODELS = () =>
-  [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(Boolean))]
+  [...new Set([
+    process.env.GEMINI_MODEL,
+    'gemini-3.8-flash',
+    'gemini-flash-latest',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-lite-latest',
+    'gemini-3.1-flash-lite',
+  ].filter(Boolean))]
 const TRY_NEXT = new Set([404, 429, 500, 503])
 const MAX_INPUT_CHARS = 300
 
@@ -69,7 +76,7 @@ export async function parseRuleWithLLM({ text, knownBrands = [], knownPlatforms 
   }
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 20000)
+  const timer = setTimeout(() => controller.abort(), 25000)
 
   try {
     const body = JSON.stringify({
@@ -86,22 +93,34 @@ export async function parseRuleWithLLM({ text, knownBrands = [], knownPlatforms 
     })
 
     let resp = null
-    for (const model of MODELS()) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
-      resp = await fetch(url, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-        body,
-      })
-      if (!TRY_NEXT.has(resp.status)) break // success, or an error another model won't fix (e.g. bad key)
-      console.error(`Gemini model ${model} returned ${resp.status}, trying next`)
+    // Two rounds over the model list, with a short pause between rounds,
+    // because "high demand" errors from Google usually clear within seconds.
+    outer: for (let round = 0; round < 2; round++) {
+      if (round > 0) await new Promise((r) => setTimeout(r, 1500))
+      for (const model of MODELS()) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+        resp = await fetch(url, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+          body,
+        })
+        if (!TRY_NEXT.has(resp.status)) break outer // success, or an error another model won't fix (e.g. bad key)
+        console.error(`Gemini model ${model} returned ${resp.status}, trying next`)
+      }
     }
 
     if (!resp.ok) {
       const detail = await resp.text().catch(() => '')
       console.error('Gemini API error', resp.status, detail.slice(0, 300))
-      return { ok: false, httpStatus: 502, error: 'The AI service did not respond properly. Please try again.' }
+      const busy = resp.status === 503 || resp.status === 429
+      return {
+        ok: false,
+        httpStatus: 502,
+        error: busy
+          ? "Google's AI service is very busy right now. Please wait a few seconds and press Read rule again."
+          : 'The AI service did not respond properly. Please try again.',
+      }
     }
 
     const data = await resp.json()
